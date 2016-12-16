@@ -1,7 +1,6 @@
 package file
 
 import (
-  "bufio"
   "bytes"
   "time"
   "io"
@@ -39,8 +38,11 @@ func (handle *FileHandle) WriteTo(w io.Writer) (n int64, err error) {
 }
 
 func WriteFile(dst io.Writer, info FileHeader, src io.Reader) (nWritten int, err error) {
-  dest := bufio.NewWriter(dst)
-  n, err := dest.Write([]byte{0xFA, 0xFA})
+  if dst == nil || src == nil {
+    err = fmt.Errorf("you must provide a non nil dst and src")
+    return
+  }
+  n, err := dst.Write([]byte{0xFA, 0xFA})
   if err != nil {
     return
   }
@@ -65,29 +67,28 @@ func WriteFile(dst io.Writer, info FileHeader, src io.Reader) (nWritten int, err
   }
 
   headLength := headerBuffer.Len()
-  n64, err := writeNumber(uint(headLength), 2, dest)
+  n64, err := writeNumber(uint(headLength), 2, dst)
   if err != nil {
     return
   }
   nWritten += int(n64)
-  n64, err = headerBuffer.WriteTo(dest)
+  n64, err = headerBuffer.WriteTo(dst)
   if err != nil {
     return
   }
   nWritten += int(n64)
-  err = dest.Flush()
   if err != nil {
     return
   }
 
   compressionWriter := gzip.NewWriter(dst)
   defer compressionWriter.Close()
+  defer compressionWriter.Flush()
   n64, err = io.Copy(compressionWriter, src)
   if err != nil {
     return
   }
   nWritten += int(n64)
-  compressionWriter.Flush()
   return
 }
 
@@ -136,15 +137,17 @@ func ReadFileHeader(src io.Reader) (header FileHeader, nRead int, err error) {
 }
 
 func ReadFile(src io.Reader) (handle *FileHandle, err error) {
+  if src == nil {
+    err = fmt.Errorf("you need to provide a non nil reader")
+    return
+  }
   handle = &FileHandle{rawSource: src}
   handle.Header, _, err = ReadFileHeader(src)
   if err == nil {
-    var gz *gzip.Reader
-    gz, err = gzip.NewReader(src)
+    handle.source, err = gzip.NewReader(src)
     if err != nil {
       return
     }
-    handle.source = gz
   }
 
   return
@@ -160,15 +163,14 @@ func writeNumber(number uint, byteCount int, out io.Writer) (n int64, err error)
 }
 
 func readNumber(byteCount int, in io.Reader) (number uint64, err error) {
-  singleByte := make([]byte, 1)
+  bytez := make([]byte, byteCount)
+  _, err = in.Read(bytez)
+  if err != nil {
+    return
+  }
   for i := 0; i < byteCount; i++ {
-    _, err = in.Read(singleByte)
-    if err != nil {
-      return
-    }
-
     shift := uint(8 * (byteCount - i - 1))
-    number = number | uint64(singleByte[0]) << shift
+    number = number | uint64(bytez[i]) << shift
   }
   return
 }

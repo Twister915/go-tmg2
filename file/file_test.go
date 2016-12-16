@@ -36,7 +36,33 @@ func TestWrite(t *testing.T) {
   checkAgainstReal(t, &buffer, "encoded")
 }
 
+func TestBadRead(t *testing.T) {
+  badData := make([]byte, 128)
+  _, err := ReadFile(bytes.NewReader(badData))
+  if err == nil {
+    t.Error("there was no error... the data was clearly bad, but we had no error.")
+  }
+
+  _, err = ReadFile(nil)
+  if err == nil {
+    t.Error("there was no error when a nil writer was provided")
+  }
+}
+
+func TestBadWrite(t *testing.T) {
+  _, err := WriteFile(nil, FileHeader{}, nil)
+  if err == nil {
+    t.Error("there was no error when a nil src/dst was provided to the Write function")
+  }
+}
+
 func BenchmarkWrite(b *testing.B) {
+  encodedInfo, err := os.Stat("test_data/encoded")
+  if err != nil {
+    return
+  }
+  encodedSize := int(encodedInfo.Size())
+
   source, err := ioutil.ReadFile("test_data/raw")
   if err != nil {
     b.Error(err)
@@ -44,11 +70,18 @@ func BenchmarkWrite(b *testing.B) {
   b.ResetTimer()
   for i := 0; i < b.N; i++ {
     var buffer bytes.Buffer
+    buffer.Grow(encodedSize)
     WriteFile(&buffer, testFileHeader, bytes.NewReader(source))
   }
 }
 
 func BenchmarkRead(b *testing.B) {
+  rawInfo, err := os.Stat("test_data/raw")
+  if err != nil {
+    return
+  }
+  rawSize := int(rawInfo.Size())
+
   source, err := ioutil.ReadFile("test_data/encoded")
   if err != nil {
     b.Error(err)
@@ -60,9 +93,12 @@ func BenchmarkRead(b *testing.B) {
     if err != nil {
       b.Error(err)
     }
-    _, err = ioutil.ReadAll(handle)
+    data, err := ioutil.ReadAll(handle)
     if err != nil {
       b.Error(err)
+    }
+    if len(data) != rawSize {
+      b.Error("the data was not a valid size...")
     }
   }
 }

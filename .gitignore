@@ -1,2 +1,4 @@
 .DS_Store
 go-tmg2
+*.prof
+*.test
